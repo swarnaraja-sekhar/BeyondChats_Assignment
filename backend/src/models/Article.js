@@ -17,7 +17,8 @@ const articleSchema = new mongoose.Schema({
   },
   author: {
     type: String,
-    trim: true
+    trim: true,
+    default: 'BeyondChats Team'
   },
   publishedDate: {
     type: Date
@@ -71,9 +72,7 @@ const articleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster queries
-articleSchema.index({ sourceUrl: 1 });
-articleSchema.index({ isEnhanced: 1 });
+// removed duplicate index - was causing warning
 articleSchema.index({ createdAt: -1 });
 
 const Article = mongoose.model('Article', articleSchema);
