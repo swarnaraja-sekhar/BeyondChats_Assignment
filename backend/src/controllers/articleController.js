@@ -1,5 +1,6 @@
 const Article = require('../models/Article');
 const scraperService = require('../services/scraperService');
+const enhancerService = require('../services/enhancerService');
 
 // @desc    Get all articles
 // @route   GET /api/articles
@@ -175,22 +176,26 @@ exports.deleteArticle = async (req, res) => {
 // @route   POST /api/scrape
 // @access  Public
 exports.scrapeArticles = async (req, res) => {
-  try {
-    const { count = 5 } = req.body;
+  const { count = 5 } = req.body;
+  
+  // Respond immediately to prevent timeout
+  res.status(202).json({
+    success: true,
+    message: `Scraping ${count} articles in background. Check /api/articles endpoint for results.`
+  });
 
+  // Run scraping in background
+  try {
     console.log(`Starting to scrape ${count} articles...`);
     const scrapedArticles = await scraperService.scrapeArticles(parseInt(count));
 
     if (scrapedArticles.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'No articles found to scrape'
-      });
+      console.log('No articles found to scrape');
+      return;
     }
 
     // Save articles to database
-    const savedArticles = [];
-    const errors = [];
+    let savedCount = 0;
 
     for (const articleData of scrapedArticles) {
       try {
@@ -199,36 +204,26 @@ exports.scrapeArticles = async (req, res) => {
         
         if (existing) {
           console.log(`Article already exists: ${articleData.sourceUrl}`);
-          savedArticles.push(existing);
         } else {
           const article = await Article.create(articleData);
-          savedArticles.push(article);
+          savedCount++;
           console.log(`Saved article: ${article.title}`);
         }
       } catch (error) {
         console.error(`Error saving article:`, error.message);
-        errors.push({
-          url: articleData.sourceUrl,
-          error: error.message
-        });
       }
     }
 
-    res.status(201).json({
-      success: true,
-      message: `Scraped and saved ${savedArticles.length} articles`,
-      scraped: scrapedArticles.length,
-      saved: savedArticles.length,
-      errors: errors.length > 0 ? errors : undefined,
-      data: savedArticles
-    });
+    console.log(`Scraping complete. Saved ${savedCount} new articles.`);
+
+    // Kick off enhancement pipeline in background (in-process)
+    try {
+      enhancerService.runEnhancerInBackground();
+    } catch (err) {
+      console.error('Failed to start enhancer:', err.message);
+    }
   } catch (error) {
     console.error('Scrape error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Scraping failed',
-      message: error.message
-    });
   }
 };
 

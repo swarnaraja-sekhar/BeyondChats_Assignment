@@ -35,3 +35,133 @@ code {
   background: #a1a1a1;
 }
 
+/* Article content styling */
+.article-content {
+  line-height: 1.8;
+  font-size: 1.1rem;
+  color: #374151;
+}
+
+.article-content p {
+  margin-bottom: 1.5rem;
+}
+
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4 {
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: #1f2937;
+}
+
+.article-content h1 { font-size: 2rem; }
+.article-content h2 { font-size: 1.6rem; }
+.article-content h3 { font-size: 1.35rem; }
+.article-content h4 { font-size: 1.15rem; }
+
+.article-content ul,
+.article-content ol {
+  margin-bottom: 1.5rem;
+  padding-left: 2rem;
+}
+
+.article-content ul { list-style-type: disc; }
+.article-content ol { list-style-type: decimal; }
+
+.article-content li {
+  margin-bottom: 0.5rem;
+}
+
+.article-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.article-content a:hover {
+  color: #1d4ed8;
+}
+
+.article-content img {
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+}
+
+.article-content blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: #6b7280;
+  background-color: #f3f4f6;
+  padding: 1rem;
+  border-radius: 0 8px 8px 0;
+}
+
+.article-content pre,
+.article-content code {
+  background-color: #1f2937;
+  color: #e5e7eb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.article-content pre {
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.article-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+.article-content th,
+.article-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.article-content th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.article-content hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 2rem 0;
+}
+
+/* Hide icon elements and junk content */
+.article-content svg,
+.article-content i[class*="icon"],
+.article-content i[class*="fa-"],
+.article-content .dashicons,
+.article-content [class*="icon"] {
+  display: none !important;
+}
+
+/* Hide images that look like icons (small size) */
+.article-content img[width="16"],
+.article-content img[width="24"],
+.article-content img[width="32"],
+.article-content img[height="16"],
+.article-content img[height="24"],
+.article-content img[height="32"] {
+  display: none !important;
+}
+
+/* Ensure only meaningful content is shown */
+.article-content p:empty,
+.article-content span:empty {
+  display: none;
+}
+

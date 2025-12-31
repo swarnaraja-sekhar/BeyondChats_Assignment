@@ -8,333 +8,444 @@ class ScraperService {
   }
 
   /**
-   * Scrape articles from BeyondChats blog
-   * @param {number} count - Number of articles to scrape (default 5)
-   * @returns {Promise<Array>} Array of scraped articles
+   * Main scraping function - uses Puppeteer for JS-rendered Elementor content
    */
   async scrapeArticles(count = 5) {
+    console.log('Starting to scrape BeyondChats blog articles...');
+    
+    try {
+      return await this.scrapeWithPuppeteer(count);
+    } catch (error) {
+      console.error('Puppeteer scraping failed:', error.message);
+      console.log('Trying axios fallback...');
+      return await this.scrapeWithAxios(count);
+    }
+  }
+
+  /**
+   * Primary method: Puppeteer for JavaScript-rendered content
+   */
+  async scrapeWithPuppeteer(count) {
     let browser;
     try {
       console.log('Launching browser...');
       browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       });
 
       const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+      page.setDefaultTimeout(20000);
 
-      // Navigate to the blogs page
+      // Navigate to blog listing
       console.log('Navigating to blogs page...');
-      await page.goto(this.baseUrl, { 
-        waitUntil: 'networkidle2',
-        timeout: 60000 
-      });
+      await page.goto(this.baseUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+      await this.sleep(1200);
 
-      // Wait for blog content to load
-      await page.waitForSelector('article, .blog-post, .post, [class*="blog"], [class*="article"]', { timeout: 30000 }).catch(() => {
-        console.log('No specific blog selector found, continuing with page content...');
-      });
+      // Get article links and filter out search/tag/category pages
+      const articleLinks = await page.evaluate(() => {
+        const links = [];
 
-      // Get the last page of blogs (oldest articles)
-      const lastPageUrl = await this.getLastPageUrl(page);
-      
-      if (lastPageUrl && lastPageUrl !== this.baseUrl) {
-        console.log(`Navigating to last page: ${lastPageUrl}`);
-        await page.goto(lastPageUrl, { 
-          waitUntil: 'networkidle2',
-          timeout: 60000 
+        const isArticleUrl = (href) => {
+          try {
+            const url = new URL(href, 'https://beyondchats.com');
+            const segments = url.pathname.split('/').filter(Boolean);
+            const slug = segments[segments.length - 1] || '';
+
+            // reject tag/category/search-like pages
+            if (segments.includes('tag') || segments.includes('category') || segments.includes('search')) return false;
+
+            return url.hostname.includes('beyondchats.com') &&
+              url.pathname.startsWith('/blogs/') &&
+              segments.length >= 2 &&
+              !url.search &&
+              !url.hash &&
+              slug.includes('-') &&
+              slug.length > 4;
+          } catch (e) {
+            return false;
+          }
+        };
+
+        document.querySelectorAll('a[href]').forEach(a => {
+          const href = a.href;
+          if (href && isArticleUrl(href) && !links.includes(href)) {
+            links.push(href);
+          }
         });
+
+        return links;
+      });
+
+      console.log(`Found ${articleLinks.length} article links`);
+      const linksToScrape = articleLinks.slice(0, count);
+      
+      const articles = [];
+      const concurrency = 2;
+      const queue = [...linksToScrape];
+      const running = [];
+
+      const worker = async (link) => {
+        const articlePage = await browser.newPage();
+        articlePage.setDefaultTimeout(20000);
+        await articlePage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        try {
+          console.log(`\nScraping: ${link}`);
+          const article = await this.scrapeArticlePage(articlePage, link);
+          if (article && article.content) {
+            articles.push(article);
+            console.log(`  ✓ Got "${article.title}" (${article.content.length} chars)`);
+          } else {
+            console.log('  ✗ Could not extract content');
+          }
+        } catch (err) {
+          console.error(`  ✗ Error: ${err.message}`);
+        } finally {
+          await articlePage.close();
+        }
+      };
+
+      while (queue.length > 0 || running.length > 0) {
+        while (running.length < concurrency && queue.length > 0) {
+          const link = queue.shift();
+          const promise = worker(link).then(() => {
+            const idx = running.indexOf(promise);
+            if (idx > -1) running.splice(idx, 1);
+          });
+          running.push(promise);
+        }
+        if (running.length > 0) {
+          await Promise.race(running);
+        }
       }
 
-      // Get article links from the page
-      const articleLinks = await this.getArticleLinks(page, count);
-      console.log(`Found ${articleLinks.length} article links`);
+      await browser.close();
+      console.log(`\nSuccessfully scraped ${articles.length} articles`);
+      return articles;
+    } catch (error) {
+      if (browser) await browser.close();
+      throw error;
+    }
+  }
 
-      // Scrape each article
-      const articles = [];
-      for (const link of articleLinks) {
+  /**
+   * Scrape a single article page
+   */
+  async scrapeArticlePage(page, url) {
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+    await this.sleep(1200);
+
+    const articleData = await page.evaluate(() => {
+      // Get title from h1
+      const h1 = document.querySelector('h1');
+      let title = h1 ? h1.innerText.trim() : '';
+      
+      // Fallback to meta title
+      if (!title) {
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        title = ogTitle ? ogTitle.content : '';
+      }
+
+      // Get image
+      const ogImage = document.querySelector('meta[property="og:image"]');
+      const imageUrl = ogImage ? ogImage.content : '';
+      
+      // Get excerpt/description
+      const metaDesc = document.querySelector('meta[name="description"]') || 
+                       document.querySelector('meta[property="og:description"]');
+      const excerpt = metaDesc ? metaDesc.content : '';
+
+      // BeyondChats uses Elementor - find content in Elementor widgets
+      // Look for the main text content widgets
+      const contentSelectors = [
+        '.elementor-widget-theme-post-content',
+        '.elementor-widget-text-editor',
+        '[data-widget_type="theme-post-content.default"]',
+        '[data-widget_type="text-editor.default"]',
+        '.elementor-text-editor',
+        '.entry-content',
+        '.post-content',
+        'article .elementor-section',
+        'article'
+      ];
+      
+      let mainContent = null;
+      for (const selector of contentSelectors) {
+        const el = document.querySelector(selector);
+        if (el && el.innerText.length > 200) {
+          mainContent = el;
+          break;
+        }
+      }
+      
+      // If still no content, get all elementor text widgets
+      if (!mainContent) {
+        const textWidgets = document.querySelectorAll('.elementor-widget-text-editor');
+        if (textWidgets.length > 0) {
+          // Create a container with all text widgets
+          const container = document.createElement('div');
+          textWidgets.forEach(w => container.appendChild(w.cloneNode(true)));
+          mainContent = container;
+        }
+      }
+      
+      // Final fallback - get body content after the header
+      if (!mainContent) {
+        mainContent = document.querySelector('main') || document.body;
+      }
+
+      // Now extract content from mainContent
+      const contentElements = [];
+      const seenTexts = new Set();
+      
+      // Skip patterns
+      const skipPatterns = [
+        'cookie', 'privacy', 'subscribe', 'newsletter', 'follow us', 
+        'share', 'leave a reply', 'related posts', 'login', 'register', 
+        'copyright', 'all rights reserved', 'no comments', 'simran jain',
+        'beyondchats team', 'november', 'december', 'january', 'february',
+        'posted by', 'written by', 'author:', 'category:', 'tags:'
+      ];
+      
+      const isValidParagraph = (text) => {
+        if (!text || text.length < 50) return false;
+        const letterCount = (text.match(/[a-zA-Z]/g) || []).length;
+        if (letterCount < text.length * 0.4) return false;
+        const lowerText = text.toLowerCase();
+        // Skip if starts with common metadata
+        if (/^(by\s|posted|written|author|november|december|january)/i.test(text)) return false;
+        if (skipPatterns.some(p => lowerText.includes(p) && text.length < 100)) return false;
+        if (text.includes('{') || text.includes('settings') || text.includes('sticky')) return false;
+        return true;
+      };
+
+      // Get all text content elements within the main content area
+      mainContent.querySelectorAll('h2, h3, h4, p, ul, ol, blockquote').forEach(el => {
+        const tag = el.tagName.toLowerCase();
+        const text = el.innerText.trim();
+        
+        // Skip if already seen or inside unwanted containers
+        if (seenTexts.has(text)) return;
+        
+        // Check if inside header/footer/sidebar
+        const parent = el.closest('header, footer, nav, aside, .sidebar, .related-posts, .elementor-widget-post-info');
+        if (parent) return;
+        
+        if (tag.startsWith('h')) {
+          // Headings
+          if (text && text.length > 3 && text.length < 200) {
+            const letterCount = (text.match(/[a-zA-Z]/g) || []).length;
+            const lowerText = text.toLowerCase();
+            // Skip navigation headings
+            if (letterCount > text.length * 0.5 && 
+                !lowerText.includes('related') && 
+                !lowerText.includes('comment') &&
+                !lowerText.includes('share')) {
+              seenTexts.add(text);
+              contentElements.push({ tag, text });
+            }
+          }
+        } else if (tag === 'p') {
+          if (isValidParagraph(text)) {
+            seenTexts.add(text);
+            contentElements.push({ tag: 'p', text });
+          }
+        } else if (tag === 'blockquote') {
+          if (text && text.length > 20) {
+            seenTexts.add(text);
+            contentElements.push({ tag: 'blockquote', text });
+          }
+        } else if (tag === 'ul' || tag === 'ol') {
+          const items = [];
+          el.querySelectorAll('li').forEach(li => {
+            const liText = li.innerText.trim();
+            if (liText && liText.length > 5 && !seenTexts.has(liText)) {
+              items.push(liText);
+              seenTexts.add(liText);
+            }
+          });
+          if (items.length > 0) {
+            contentElements.push({ tag, items });
+          }
+        }
+      });
+
+      // Build HTML preserving structure
+      let contentHtml = '';
+      contentElements.forEach(el => {
+        if (el.tag === 'p') {
+          contentHtml += `<p>${el.text}</p>\n`;
+        } else if (el.tag === 'blockquote') {
+          contentHtml += `<blockquote>${el.text}</blockquote>\n`;
+        } else if (el.tag.startsWith('h')) {
+          contentHtml += `<${el.tag}>${el.text}</${el.tag}>\n`;
+        } else if (el.tag === 'ul' || el.tag === 'ol') {
+          contentHtml += `<${el.tag}>\n`;
+          el.items.forEach(item => {
+            contentHtml += `  <li>${item}</li>\n`;
+          });
+          contentHtml += `</${el.tag}>\n`;
+        }
+      });
+
+      // If still no content, use excerpt
+      if (!contentHtml && excerpt) {
+        contentHtml = `<p>${excerpt}</p>`;
+      }
+
+      return {
+        title,
+        content: contentHtml,
+        excerpt,
+        imageUrl,
+        author: 'BeyondChats Team'
+      };
+    });
+
+    if (!articleData.title) {
+      return null;
+    }
+
+    // Skip if extracted content is too short (likely listing/search pages)
+    const contentTextLength = (articleData.content || '').replace(/<[^>]+>/g, '').trim().length;
+    if (contentTextLength < 500) {
+      console.log(`  Skipping "${articleData.title}" (content too short: ${contentTextLength} chars)`);
+      return null;
+    }
+
+    console.log(`  Got: "${articleData.title}" - ${articleData.content.length} chars`);
+
+    return {
+      title: articleData.title.substring(0, 500),
+      content: articleData.content || '<p>Content not available.</p>',
+      excerpt: (articleData.excerpt || '').substring(0, 500),
+      author: articleData.author,
+      imageUrl: articleData.imageUrl,
+      sourceUrl: url,
+      publishedDate: new Date(),
+      scrapedAt: new Date()
+    };
+  }
+
+  /**
+   * Fallback: Axios + Cheerio scraping
+   */
+  async scrapeWithAxios(count) {
+    try {
+      console.log('Using axios fallback...');
+      
+      const response = await axios.get(this.baseUrl, {
+        timeout: 15000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      const $ = cheerio.load(response.data);
+      const articleLinks = [];
+
+      const isArticleUrl = (rawHref) => {
         try {
-          console.log(`Scraping article: ${link}`);
-          const article = await this.scrapeArticleContent(page, link);
+          const fullUrl = rawHref.startsWith('http') ? rawHref : `https://beyondchats.com${rawHref}`;
+          const url = new URL(fullUrl);
+          const segments = url.pathname.split('/').filter(Boolean);
+          const slug = segments[segments.length - 1] || '';
+
+          // reject tag/category/search-like pages
+          if (segments.includes('tag') || segments.includes('category') || segments.includes('search')) return false;
+
+          return url.hostname.includes('beyondchats.com') &&
+            url.pathname.startsWith('/blogs/') &&
+            segments.length >= 2 &&
+            !url.search &&
+            !url.hash &&
+            slug.includes('-') &&
+            slug.length > 4;
+        } catch (e) {
+          return false;
+        }
+      };
+
+      $('a[href]').each((i, el) => {
+        const href = $(el).attr('href');
+        if (href && isArticleUrl(href) && !articleLinks.includes(href)) {
+          const fullUrl = href.startsWith('http') ? href : `https://beyondchats.com${href}`;
+          articleLinks.push(fullUrl);
+        }
+      });
+
+      console.log(`Found ${articleLinks.length} article links`);
+      const linksToScrape = articleLinks.slice(0, count);
+      
+      const articles = [];
+      for (const link of linksToScrape) {
+        try {
+          console.log(`Scraping: ${link}`);
+          const article = await this.scrapeArticleAxios(link);
           if (article) {
             articles.push(article);
+            console.log(`  ✓ Got: ${article.title}`);
           }
-        } catch (error) {
-          console.error(`Error scraping article ${link}:`, error.message);
+          await this.sleep(500);
+        } catch (err) {
+          console.error(`Failed ${link}:`, err.message);
         }
       }
 
       return articles;
     } catch (error) {
-      console.error('Scraping error:', error);
-      throw error;
-    } finally {
-      if (browser) {
-        await browser.close();
-      }
+      console.error('Axios fallback failed:', error.message);
+      return [];
     }
   }
 
-  /**
-   * Get the URL of the last page (oldest articles)
-   */
-  async getLastPageUrl(page) {
-    try {
-      const lastPageUrl = await page.evaluate(() => {
-        // Look for pagination links
-        const paginationSelectors = [
-          '.pagination a:last-child',
-          '.page-numbers:last-child',
-          'a[href*="page"]:last-of-type',
-          '.nav-links a:last-child',
-          '[class*="pagination"] a:last-child'
-        ];
+  async scrapeArticleAxios(url) {
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
 
-        for (const selector of paginationSelectors) {
-          const link = document.querySelector(selector);
-          if (link && link.href) {
-            return link.href;
-          }
-        }
+    const $ = cheerio.load(response.data);
+    
+    // Remove junk
+    $('script, style, nav, header, footer, aside, .sidebar').remove();
 
-        // Try to find the highest page number
-        const pageLinks = document.querySelectorAll('a[href*="page"]');
-        let maxPage = 1;
-        let maxPageUrl = null;
+    const title = $('h1').first().text().trim() ||
+                  $('meta[property="og:title"]').attr('content') || '';
+    
+    const imageUrl = $('meta[property="og:image"]').attr('content') || '';
+    const excerpt = $('meta[name="description"]').attr('content') || '';
 
-        pageLinks.forEach(link => {
-          const match = link.href.match(/page[\/=](\d+)/);
-          if (match) {
-            const pageNum = parseInt(match[1]);
-            if (pageNum > maxPage) {
-              maxPage = pageNum;
-              maxPageUrl = link.href;
-            }
-          }
-        });
+    // Get paragraphs
+    const paragraphs = [];
+    $('p').each((i, el) => {
+      const text = $(el).text().trim();
+      if (text && text.length > 40) {
+        paragraphs.push(`<p>${text}</p>`);
+      }
+    });
 
-        return maxPageUrl;
-      });
+    if (!title) return null;
 
-      return lastPageUrl;
-    } catch (error) {
-      console.log('Could not find pagination, using first page');
-      return null;
-    }
+    // Skip if content too short (avoid listing/search pages)
+    const contentTextLength = paragraphs.join(' ').replace(/<[^>]+>/g, '').trim().length;
+    if (contentTextLength < 500) return null;
+
+    return {
+      title,
+      content: paragraphs.join('\n') || `<p>${excerpt}</p>`,
+      excerpt,
+      author: 'BeyondChats Team',
+      imageUrl,
+      sourceUrl: url,
+      publishedDate: new Date(),
+      scrapedAt: new Date()
+    };
   }
 
-  /**
-   * Get article links from the current page
-   */
-  async getArticleLinks(page, count) {
-    const links = await page.evaluate((maxCount) => {
-      const articleSelectors = [
-        'article a[href*="/blog"]',
-        '.blog-post a',
-        '.post a[href]',
-        'a[href*="/blogs/"]',
-        '.entry-title a',
-        'h2 a[href*="blog"]',
-        'h3 a[href*="blog"]',
-        '[class*="blog"] a[href]',
-        '[class*="article"] a[href]',
-        '.card a[href]'
-      ];
-
-      const foundLinks = new Set();
-
-      for (const selector of articleSelectors) {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => {
-          if (el.href && 
-              !el.href.includes('#') && 
-              !el.href.includes('category') &&
-              !el.href.includes('tag') &&
-              !el.href.includes('author') &&
-              el.href.includes('blog')) {
-            foundLinks.add(el.href);
-          }
-        });
-        if (foundLinks.size >= maxCount) break;
-      }
-
-      // If no blog links found, try getting all article-like links
-      if (foundLinks.size === 0) {
-        const allLinks = document.querySelectorAll('a[href]');
-        allLinks.forEach(el => {
-          if (el.href && 
-              el.href.includes(window.location.hostname) &&
-              !el.href.endsWith('/blogs/') &&
-              el.href.includes('/blogs/')) {
-            foundLinks.add(el.href);
-          }
-        });
-      }
-
-      return Array.from(foundLinks).slice(0, maxCount);
-    }, count);
-
-    return links;
-  }
-
-  /**
-   * Scrape content from a single article page
-   */
-  async scrapeArticleContent(page, url) {
-    try {
-      await page.goto(url, { 
-        waitUntil: 'networkidle2',
-        timeout: 60000 
-      });
-
-      // Wait a bit for dynamic content
-      await page.waitForTimeout(2000);
-
-      const articleData = await page.evaluate(() => {
-        // Helper to get text content
-        const getText = (selector) => {
-          const el = document.querySelector(selector);
-          return el ? el.textContent.trim() : null;
-        };
-
-        // Helper to get attribute
-        const getAttr = (selector, attr) => {
-          const el = document.querySelector(selector);
-          return el ? el.getAttribute(attr) : null;
-        };
-
-        // Title selectors
-        const titleSelectors = [
-          'h1.entry-title',
-          'h1.post-title',
-          'article h1',
-          '.blog-title h1',
-          'h1[class*="title"]',
-          '.post h1',
-          'h1'
-        ];
-
-        let title = null;
-        for (const selector of titleSelectors) {
-          title = getText(selector);
-          if (title && title.length > 5) break;
-        }
-
-        // Content selectors
-        const contentSelectors = [
-          '.entry-content',
-          '.post-content',
-          'article .content',
-          '.blog-content',
-          '[class*="article-body"]',
-          '[class*="post-body"]',
-          'article',
-          '.prose',
-          'main article'
-        ];
-
-        let content = null;
-        for (const selector of contentSelectors) {
-          const el = document.querySelector(selector);
-          if (el) {
-            // Get HTML content for rich formatting
-            content = el.innerHTML;
-            break;
-          }
-        }
-
-        // If no content div found, try to get main content
-        if (!content) {
-          const main = document.querySelector('main') || document.querySelector('article');
-          if (main) {
-            content = main.innerHTML;
-          }
-        }
-
-        // Image
-        const imageSelectors = [
-          'article img',
-          '.featured-image img',
-          '.post-thumbnail img',
-          '[class*="hero"] img',
-          'meta[property="og:image"]'
-        ];
-
-        let imageUrl = null;
-        for (const selector of imageSelectors) {
-          if (selector.includes('meta')) {
-            imageUrl = getAttr(selector, 'content');
-          } else {
-            imageUrl = getAttr(selector, 'src');
-          }
-          if (imageUrl) break;
-        }
-
-        // Author
-        const authorSelectors = [
-          '.author-name',
-          '.post-author',
-          '[rel="author"]',
-          '.byline',
-          '[class*="author"]'
-        ];
-
-        let author = null;
-        for (const selector of authorSelectors) {
-          author = getText(selector);
-          if (author) break;
-        }
-
-        // Date
-        const dateSelectors = [
-          'time[datetime]',
-          '.post-date',
-          '.entry-date',
-          '[class*="date"]',
-          'meta[property="article:published_time"]'
-        ];
-
-        let publishedDate = null;
-        for (const selector of dateSelectors) {
-          if (selector.includes('meta')) {
-            publishedDate = getAttr(selector, 'content');
-          } else if (selector.includes('time')) {
-            publishedDate = getAttr('time', 'datetime') || getText(selector);
-          } else {
-            publishedDate = getText(selector);
-          }
-          if (publishedDate) break;
-        }
-
-        // Excerpt from meta
-        const excerpt = getAttr('meta[name="description"]', 'content') ||
-                       getAttr('meta[property="og:description"]', 'content');
-
-        return {
-          title,
-          content,
-          imageUrl,
-          author,
-          publishedDate,
-          excerpt
-        };
-      });
-
-      if (!articleData.title || !articleData.content) {
-        console.log(`Incomplete article data for ${url}`);
-        return null;
-      }
-
-      return {
-        ...articleData,
-        sourceUrl: url,
-        scrapedAt: new Date()
-      };
-    } catch (error) {
-      console.error(`Error scraping article content from ${url}:`, error.message);
-      return null;
-    }
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 

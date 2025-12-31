@@ -12,6 +12,7 @@ function ArticleDetail() {
 
     useEffect(() => {
         fetchArticle();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
     const fetchArticle = async () => {
@@ -40,6 +41,41 @@ function ArticleDetail() {
         });
     };
 
+    // Clean content by removing icon characters, HTML junk, and attributes
+    const cleanContent = (html) => {
+        if (!html) return '';
+        
+        // Remove SVG tags and icon elements
+        let cleaned = html.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '');
+        cleaned = cleaned.replace(/<i[^>]*class="[^"]*icon[^"]*"[^>]*>[\s\S]*?<\/i>/gi, '');
+        cleaned = cleaned.replace(/<i[^>]*class="[^"]*fa[^"]*"[^>]*>[\s\S]*?<\/i>/gi, '');
+        
+        // Remove HTML attribute data that got scraped (like a-settings="{...}")
+        cleaned = cleaned.replace(/[a-z-]+settings="[^"]*"/gi, '');
+        cleaned = cleaned.replace(/data-[a-z-]+="[^"]*"/gi, '');
+        
+        // Remove JSON-like content that shouldn't be there
+        cleaned = cleaned.replace(/\{"[^}]+\}/g, '');
+        cleaned = cleaned.replace(/\[[^\]]*"sticky[^\]]*\]/g, '');
+        
+        // Remove lines that are just attribute junk
+        cleaned = cleaned.replace(/<p>[^<]*settings[^<]*<\/p>/gi, '');
+        cleaned = cleaned.replace(/<p>[^<]*sticky[^<]*offset[^<]*<\/p>/gi, '');
+        
+        // Remove common icon unicode characters
+        cleaned = cleaned.replace(/[\u2600-\u26FF\u2700-\u27BF\uE000-\uF8FF]/g, '');
+        
+        // Remove empty paragraphs
+        cleaned = cleaned.replace(/<p>\s*<\/p>/gi, '');
+        cleaned = cleaned.replace(/<p>\s*>\s*<\/p>/gi, '');
+        
+        // Remove lines that are just links with no text or orphaned characters
+        cleaned = cleaned.replace(/<p>\s*<a[^>]*>\s*<\/a>\s*<\/p>/gi, '');
+        cleaned = cleaned.replace(/<p>\s*[<>]\s*<\/p>/gi, '');
+        
+        return cleaned;
+    };
+
     if (loading) return <LoadingSpinner />;
 
     if (error || !article) {
@@ -54,9 +90,11 @@ function ArticleDetail() {
         );
     }
 
-    const currentContent = showEnhanced && article.enhancedContent 
+    const rawContent = showEnhanced && article.enhancedContent 
         ? article.enhancedContent 
         : article.content;
+    
+    const currentContent = cleanContent(rawContent);
 
     const currentTitle = showEnhanced && article.enhancedTitle 
         ? article.enhancedTitle 
@@ -157,9 +195,16 @@ function ArticleDetail() {
 
                     {/* Article Content */}
                     <div 
-                        className="prose prose-lg max-w-none"
-                        dangerouslySetInnerHTML={{ __html: currentContent }}
+                        className="prose prose-lg max-w-none article-content"
+                        dangerouslySetInnerHTML={{ __html: currentContent || '<p>No content available</p>' }}
                     />
+
+                    {/* Show raw content if HTML seems broken */}
+                    {(!currentContent || currentContent.length < 50) && article.excerpt && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                            <p className="text-gray-700">{article.excerpt}</p>
+                        </div>
+                    )}
 
                     {/* References Section - only for enhanced articles */}
                     {showEnhanced && article.references && article.references.length > 0 && (

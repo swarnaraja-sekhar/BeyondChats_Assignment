@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ArticleCard from '../components/ArticleCard';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { getArticles, scrapeArticles } from '../services/api';
+import { getArticles, scrapeArticles, deleteArticle } from '../services/api';
 
 function Home() {
     const [articles, setArticles] = useState([]);
@@ -11,10 +11,12 @@ function Home() {
     const [scraping, setScraping] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
 
     // fetch articles on load and when filter changes
     useEffect(() => {
         fetchArticles();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filter, page]);
 
     const fetchArticles = async () => {
@@ -29,6 +31,7 @@ function Home() {
             const response = await getArticles(page, 9, enhancedFilter);
             setArticles(response.data || []);
             setTotalPages(response.pages || 1);
+            setTotalCount(response.total || 0);
         } catch (err) {
             setError('Failed to load articles. Make sure the backend is running.');
             console.error(err);
@@ -41,14 +44,55 @@ function Home() {
     const handleScrape = async () => {
         setScraping(true);
         try {
+            const previousTotal = totalCount;
             await scrapeArticles(5);
-            // refresh the list after scraping
-            await fetchArticles();
-            alert('Articles scraped successfully!');
+            await pollForNewArticles(previousTotal);
         } catch (err) {
             alert('Failed to scrape articles: ' + (err.response?.data?.message || err.message));
         } finally {
             setScraping(false);
+        }
+    };
+
+    // poll until the API reports more articles (the scrape runs async server-side)
+    const pollForNewArticles = async (previousTotal) => {
+        const maxAttempts = 45; // up to ~45 seconds to match slower scrapes
+        const delayMs = 1000;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const response = await getArticles(1, 9, filter === 'all' ? null : filter === 'enhanced');
+                const currentTotal = response.total || 0;
+
+                if (currentTotal > previousTotal) {
+                    setArticles(response.data || []);
+                    setTotalPages(response.pages || 1);
+                    setTotalCount(currentTotal);
+                    alert('Articles scraped successfully!');
+                    return;
+                }
+            } catch (err) {
+                console.error('Polling failed, will retry:', err);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+
+        // final refresh attempt even if total did not change
+        await fetchArticles();
+        alert('Scrape started; reload may take a moment.');
+    };
+
+    const handleDelete = async (id) => {
+        const confirmed = window.confirm('Delete this article?');
+        if (!confirmed) return;
+
+        try {
+            await deleteArticle(id);
+            setArticles(prev => prev.filter(a => a._id !== id));
+            setTotalCount(c => Math.max(0, c - 1));
+        } catch (err) {
+            alert('Failed to delete: ' + (err.response?.data?.message || err.message));
         }
     };
 
@@ -127,7 +171,7 @@ function Home() {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {articles.map(article => (
-                                <ArticleCard key={article._id} article={article} />
+                                <ArticleCard key={article._id} article={article} onDelete={() => handleDelete(article._id)} />
                             ))}
                         </div>
                     )}

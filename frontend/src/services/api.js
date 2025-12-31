@@ -5,7 +5,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 // create axios instance with base config
 const api = axios.create({
     baseURL: API_URL,
-    timeout: 30000,
+    timeout: 120000, // 2 minutes for scraping
     headers: {
         'Content-Type': 'application/json'
     }
