@@ -1,14 +1,16 @@
 const axios = require('axios');
 
-const ZENSERP_API_KEY = process.env.ZENSERP_API_KEY;
-
 /**
  * Search Google for articles related to a given title via Zenserp API.
  * Falls back to mock results when key is missing.
  */
 async function searchGoogle(query) {
+  const ZENSERP_API_KEY = process.env.ZENSERP_API_KEY;
+  console.log(`[GoogleSearch] Searching for: "${query}"`);
+  console.log(`[GoogleSearch] ZENSERP_API_KEY present: ${!!ZENSERP_API_KEY && ZENSERP_API_KEY !== 'your_zenserp_api_key_here'}`);
+  
   if (!ZENSERP_API_KEY || ZENSERP_API_KEY === 'your_zenserp_api_key_here') {
-    console.log('ZENSERP_API_KEY not configured, using mock results');
+    console.log('[GoogleSearch] ZENSERP_API_KEY not configured, using mock results');
     return getMockResults(query);
   }
 
@@ -22,6 +24,8 @@ async function searchGoogle(query) {
 
     const results = response.data.organic || [];
 
+    console.log(`[GoogleSearch] Got ${results.length} results from Zenserp`);
+    
     const filtered = results.filter(result => {
       const url = (result.url || '').toLowerCase();
       if (url.includes('beyondchats.com')) return false;
@@ -33,20 +37,23 @@ async function searchGoogle(query) {
       return true;
     });
 
-    return filtered.slice(0, 5).map(r => ({
+    console.log(`[GoogleSearch] ${filtered.length} results after filtering`);
+    const finalResults = filtered.slice(0, 5).map(r => ({
       title: r.title,
       link: r.url,
       snippet: r.description
     }));
+    console.log(`[GoogleSearch] Returning ${finalResults.length} results`);
+    return finalResults;
   } catch (error) {
-    console.error('Google search error:', error.message);
+    console.error('[GoogleSearch] Error:', error.message);
     return getMockResults(query);
   }
 }
 
 // Mock results for testing without API key
 function getMockResults(query) {
-  console.log('Using mock search results with pre-defined content...');
+  console.log(`[GoogleSearch] Using mock search results for: "${query}"`);
   return [
     {
       title: 'Best Practices for AI Chatbots - Tech Insights',

@@ -3,17 +3,23 @@ const OpenAI = require('openai');
 // Lazily create client only when key exists
 const getClient = () => {
   const key = process.env.OPENAI_API_KEY;
+  console.log(`[LLM] OPENAI_API_KEY present: ${!!key && key !== 'your_openai_api_key_here'}`);
   if (!key || key === 'your_openai_api_key_here') return null;
   return new OpenAI({ apiKey: key });
 };
 
 async function enhanceArticle(originalTitle, originalContent, referenceArticles) {
+  console.log(`[LLM] Enhancing article: "${originalTitle}"`);
+  console.log(`[LLM] Original content length: ${originalContent?.length || 0} chars`);
+  console.log(`[LLM] Reference articles: ${referenceArticles?.length || 0}`);
+  
   const openai = getClient();
   if (!openai) {
-    console.log('OpenAI API key not configured, using mock enhancement');
+    console.log('[LLM] OpenAI API key not configured, using mock enhancement');
     return mockEnhance(originalTitle, originalContent, referenceArticles);
   }
 
+  console.log('[LLM] Calling OpenAI API...');
   try {
     const refContent = referenceArticles.map((ref, i) =>
       `Reference Article ${i + 1} (${ref.source}):\n${ref.content.substring(0, 1500)}`
@@ -56,12 +62,13 @@ Please provide the enhanced article content in HTML format:`;
     });
 
     let enhancedContent = response.choices[0].message.content;
+    console.log(`[LLM] OpenAI response received, length: ${enhancedContent?.length || 0} chars`);
     enhancedContent += generateReferencesSection(referenceArticles);
     return enhancedContent;
   } catch (error) {
-    console.error('LLM enhancement error:', error.message);
+    console.error('[LLM] Enhancement error:', error.message);
     if (error.message.includes('quota') || error.message.includes('rate')) {
-      console.log('API quota exceeded, using mock enhancement');
+      console.log('[LLM] API quota exceeded, using mock enhancement');
       return mockEnhance(originalTitle, originalContent, referenceArticles);
     }
     return null;
@@ -79,7 +86,7 @@ function generateReferencesSection(references) {
 }
 
 function mockEnhance(title, content, references) {
-  console.log('Generating enhanced content (mock)...');
+  console.log(`[LLM] Generating mock enhanced content for: "${title}"`);
   let enhancedHtml = '';
   enhancedHtml += `<h2>${title}</h2>\n\n`;
   enhancedHtml += `<p><em>This article has been enhanced with additional insights and improved formatting for better readability.</em></p>\n\n`;
