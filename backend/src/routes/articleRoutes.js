@@ -22,12 +22,12 @@ router.route('/')
   .get(getAllArticles)
   .post(createArticle);
 
+// Enhance single article (must be before /:id to avoid being caught)
+router.post('/:id/enhance', enhanceArticle);
+
 router.route('/:id')
   .get(getArticle)
   .put(updateArticle)
   .delete(deleteArticle);
-
-// Enhance single article
-router.post('/:id/enhance', enhanceArticle);
 
 module.exports = router;
