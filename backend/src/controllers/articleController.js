@@ -227,6 +227,18 @@ exports.scrapeArticles = async (req, res) => {
   }
 };
 
+// @desc    Enhance a single article by ID
+// @route   POST /api/articles/:id/enhance
+// @access  Public
+exports.enhanceArticle = async (req, res) => {
+  try {
+    const enhanced = await enhancerService.enhanceSingleArticle(req.params.id);
+    res.status(200).json({ success: true, data: enhanced });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // @desc    Get articles that need enhancement
 // @route   GET /api/articles/pending
 // @access  Public

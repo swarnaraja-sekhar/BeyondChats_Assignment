@@ -59,4 +59,15 @@ export const deleteArticle = async (id) => {
     }
 };
 
+// enhance single article
+export const enhanceArticle = async (id) => {
+    try {
+        const response = await api.post(`/articles/${id}/enhance`);
+        return response.data;
+    } catch (error) {
+        console.error('Error enhancing article:', error);
+        throw error;
+    }
+};
+
 export default api;

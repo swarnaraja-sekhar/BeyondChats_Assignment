@@ -145,7 +145,7 @@ code {
 .article-content i[class*="icon"],
 .article-content i[class*="fa-"],
 .article-content .dashicons,
-.article-content [class*="icon"] {
+.article-content [class*="icon"]:not(h1):not(h2):not(h3):not(h4):not(p):not(ul):not(ol):not(li):not(blockquote) {
   display: none !important;
 }
 
@@ -161,7 +161,31 @@ code {
 
 /* Ensure only meaningful content is shown */
 .article-content p:empty,
-.article-content span:empty {
+.article-content span:empty,
+.article-content div:empty {
   display: none;
+}
+
+/* Better paragraph spacing */
+.article-content p + p {
+  margin-top: 1rem;
+}
+
+/* Heading hierarchy */
+.article-content h2 + p,
+.article-content h3 + p,
+.article-content h4 + p {
+  margin-top: 0.75rem;
+}
+
+/* List improvements */
+.article-content ul li,
+.article-content ol li {
+  line-height: 1.7;
+}
+
+/* Ensure readable line length */
+.article-content {
+  max-width: 65ch;
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getArticle } from '../services/api';
+import { getArticle, enhanceArticle } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 function ArticleDetail() {
@@ -9,6 +9,7 @@ function ArticleDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showEnhanced, setShowEnhanced] = useState(false);
+    const [enhancing, setEnhancing] = useState(false);
 
     useEffect(() => {
         fetchArticle();
@@ -41,39 +42,73 @@ function ArticleDetail() {
         });
     };
 
-    // Clean content by removing icon characters, HTML junk, and attributes
+    const handleEnhance = async () => {
+        setEnhancing(true);
+        try {
+            await enhanceArticle(id);
+            await fetchArticle();
+            setShowEnhanced(true);
+        } catch (err) {
+            alert('Enhancement failed: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setEnhancing(false);
+        }
+    };
+
+    // Clean content by removing icon characters, HTML junk, and attributes while preserving structure
     const cleanContent = (html) => {
         if (!html) return '';
         
+        let cleaned = html;
+        
         // Remove SVG tags and icon elements
-        let cleaned = html.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '');
+        cleaned = cleaned.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '');
         cleaned = cleaned.replace(/<i[^>]*class="[^"]*icon[^"]*"[^>]*>[\s\S]*?<\/i>/gi, '');
         cleaned = cleaned.replace(/<i[^>]*class="[^"]*fa[^"]*"[^>]*>[\s\S]*?<\/i>/gi, '');
+        cleaned = cleaned.replace(/<span[^>]*class="[^"]*icon[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
         
-        // Remove HTML attribute data that got scraped (like a-settings="{...}")
-        cleaned = cleaned.replace(/[a-z-]+settings="[^"]*"/gi, '');
-        cleaned = cleaned.replace(/data-[a-z-]+="[^"]*"/gi, '');
+        // Remove script and style tags
+        cleaned = cleaned.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        cleaned = cleaned.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        
+        // Remove HTML attribute data that got scraped
+        cleaned = cleaned.replace(/\s*[a-z-]+settings="[^"]*"/gi, '');
+        cleaned = cleaned.replace(/\s*data-[a-z-]+="[^"]*"/gi, '');
+        cleaned = cleaned.replace(/\s*class="[^"]*elementor[^"]*"/gi, '');
         
         // Remove JSON-like content that shouldn't be there
-        cleaned = cleaned.replace(/\{"[^}]+\}/g, '');
+        cleaned = cleaned.replace(/\{"[^}]*\}/g, '');
         cleaned = cleaned.replace(/\[[^\]]*"sticky[^\]]*\]/g, '');
         
         // Remove lines that are just attribute junk
         cleaned = cleaned.replace(/<p>[^<]*settings[^<]*<\/p>/gi, '');
         cleaned = cleaned.replace(/<p>[^<]*sticky[^<]*offset[^<]*<\/p>/gi, '');
+        cleaned = cleaned.replace(/<p>[^<]*elementor[^<]*<\/p>/gi, '');
         
-        // Remove common icon unicode characters
-        cleaned = cleaned.replace(/[\u2600-\u26FF\u2700-\u27BF\uE000-\uF8FF]/g, '');
+        // Remove common icon unicode characters (private use area)
+        cleaned = cleaned.replace(/[\uE000-\uF8FF]/g, '');
         
-        // Remove empty paragraphs
+        // Clean up empty elements
         cleaned = cleaned.replace(/<p>\s*<\/p>/gi, '');
         cleaned = cleaned.replace(/<p>\s*>\s*<\/p>/gi, '');
+        cleaned = cleaned.replace(/<div>\s*<\/div>/gi, '');
+        cleaned = cleaned.replace(/<span>\s*<\/span>/gi, '');
         
-        // Remove lines that are just links with no text or orphaned characters
+        // Remove orphaned tags and junk
         cleaned = cleaned.replace(/<p>\s*<a[^>]*>\s*<\/a>\s*<\/p>/gi, '');
         cleaned = cleaned.replace(/<p>\s*[<>]\s*<\/p>/gi, '');
         
-        return cleaned;
+        // Normalize whitespace between tags
+        cleaned = cleaned.replace(/>\s+</g, '>\n<');
+        
+        // Ensure proper spacing for readability
+        cleaned = cleaned.replace(/<\/h([234])>/gi, '</h$1>\n');
+        cleaned = cleaned.replace(/<\/p>/gi, '</p>\n');
+        cleaned = cleaned.replace(/<\/ul>/gi, '</ul>\n');
+        cleaned = cleaned.replace(/<\/ol>/gi, '</ol>\n');
+        cleaned = cleaned.replace(/<\/blockquote>/gi, '</blockquote>\n');
+        
+        return cleaned.trim();
     };
 
     if (loading) return <LoadingSpinner />;
@@ -155,8 +190,8 @@ function ArticleDetail() {
                         </div>
                     )}
 
-                    {/* Status Badge */}
-                    <div className="flex items-center gap-3 mb-4">
+                    {/* Status Badge + Enhance Button */}
+                    <div className="flex items-center gap-3 mb-4 flex-wrap">
                         {showEnhanced && article.isEnhanced ? (
                             <span className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
                                 ✨ Enhanced Version
@@ -165,6 +200,15 @@ function ArticleDetail() {
                             <span className="bg-yellow-100 text-yellow-800 text-sm font-medium px-3 py-1 rounded-full">
                                 Original Article
                             </span>
+                        )}
+                        {!article.isEnhanced && (
+                            <button
+                                onClick={handleEnhance}
+                                disabled={enhancing}
+                                className="bg-purple-600 text-white text-sm font-medium px-4 py-1.5 rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {enhancing ? 'Enhancing...' : '🚀 Enhance'}
+                            </button>
                         )}
                     </div>
 

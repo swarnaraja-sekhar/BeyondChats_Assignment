@@ -107,7 +107,16 @@ async function processArticle(article) {
   }
 }
 
+async function enhanceSingleArticle(articleId) {
+  const article = await Article.findById(articleId);
+  if (!article) throw new Error('Article not found');
+  if (article.isEnhanced) return article;
+  await processArticle(article);
+  return Article.findById(articleId);
+}
+
 module.exports = {
   runEnhancerInBackground,
-  runEnhancerPipeline
+  runEnhancerPipeline,
+  enhanceSingleArticle
 };

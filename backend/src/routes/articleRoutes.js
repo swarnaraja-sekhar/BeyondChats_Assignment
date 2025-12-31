@@ -7,7 +7,8 @@ const {
   updateArticle,
   deleteArticle,
   scrapeArticles,
-  getPendingArticles
+  getPendingArticles,
+  enhanceArticle
 } = require('../controllers/articleController');
 
 // Scrape route (should be before :id routes)
@@ -25,5 +26,8 @@ router.route('/:id')
   .get(getArticle)
   .put(updateArticle)
   .delete(deleteArticle);
+
+// Enhance single article
+router.post('/:id/enhance', enhanceArticle);
 
 module.exports = router;
