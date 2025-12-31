@@ -70,4 +70,15 @@ export const enhanceArticle = async (id) => {
     }
 };
 
+// enhance all pending articles
+export const enhanceAllArticles = async () => {
+    try {
+        const response = await api.post('/articles/enhance-all');
+        return response.data;
+    } catch (error) {
+        console.error('Error enhancing all articles:', error);
+        throw error;
+    }
+};
+
 export default api;

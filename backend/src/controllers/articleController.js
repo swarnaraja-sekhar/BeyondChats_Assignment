@@ -227,6 +227,25 @@ exports.scrapeArticles = async (req, res) => {
   }
 };
 
+// @desc    Enhance all pending articles
+// @route   POST /api/articles/enhance-all
+// @access  Public
+exports.enhanceAllArticles = async (req, res) => {
+  // Respond immediately
+  res.status(202).json({
+    success: true,
+    message: 'Enhancement started for all pending articles.'
+  });
+
+  // Run enhancement in background
+  try {
+    await enhancerService.runEnhancerPipeline();
+    console.log('Enhance all completed');
+  } catch (err) {
+    console.error('Enhance all failed:', err.message);
+  }
+};
+
 // @desc    Enhance a single article by ID
 // @route   POST /api/articles/:id/enhance
 // @access  Public

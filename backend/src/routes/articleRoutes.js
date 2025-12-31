@@ -8,7 +8,8 @@ const {
   deleteArticle,
   scrapeArticles,
   getPendingArticles,
-  enhanceArticle
+  enhanceArticle,
+  enhanceAllArticles
 } = require('../controllers/articleController');
 
 // Scrape route (should be before :id routes)
@@ -16,6 +17,9 @@ router.post('/scrape', scrapeArticles);
 
 // Get pending articles for enhancement
 router.get('/pending', getPendingArticles);
+
+// Enhance all pending articles
+router.post('/enhance-all', enhanceAllArticles);
 
 // CRUD routes
 router.route('/')

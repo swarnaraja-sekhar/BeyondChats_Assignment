@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getArticle, enhanceArticle } from '../services/api';
+import { getArticle } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 function ArticleDetail() {
@@ -9,7 +9,6 @@ function ArticleDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showEnhanced, setShowEnhanced] = useState(false);
-    const [enhancing, setEnhancing] = useState(false);
 
     useEffect(() => {
         fetchArticle();
@@ -40,43 +39,6 @@ function ArticleDetail() {
             month: 'long', 
             day: 'numeric'
         });
-    };
-
-    const handleEnhance = async () => {
-        setEnhancing(true);
-        try {
-            await enhanceArticle(id);
-            // Poll for completion
-            await pollForEnhancement();
-        } catch (err) {
-            alert('Enhancement failed: ' + (err.response?.data?.error || err.message));
-            setEnhancing(false);
-        }
-    };
-
-    const pollForEnhancement = async () => {
-        const maxAttempts = 60; // up to 60 seconds
-        const delayMs = 1000;
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                const response = await getArticle(id);
-                if (response.data.isEnhanced) {
-                    setArticle(response.data);
-                    setShowEnhanced(true);
-                    setEnhancing(false);
-                    return;
-                }
-            } catch (err) {
-                console.error('Poll failed:', err);
-            }
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-
-        // Timeout - refresh anyway
-        await fetchArticle();
-        setEnhancing(false);
-        alert('Enhancement is still processing. Refresh later.');
     };
 
     // Clean content by removing icon characters, HTML junk, and attributes while preserving structure
@@ -214,7 +176,7 @@ function ArticleDetail() {
                         </div>
                     )}
 
-                    {/* Status Badge + Enhance Button */}
+                    {/* Status Badge */}
                     <div className="flex items-center gap-3 mb-4 flex-wrap">
                         {showEnhanced && article.isEnhanced ? (
                             <span className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
@@ -224,15 +186,6 @@ function ArticleDetail() {
                             <span className="bg-yellow-100 text-yellow-800 text-sm font-medium px-3 py-1 rounded-full">
                                 Original Article
                             </span>
-                        )}
-                        {!article.isEnhanced && (
-                            <button
-                                onClick={handleEnhance}
-                                disabled={enhancing}
-                                className="bg-purple-600 text-white text-sm font-medium px-4 py-1.5 rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {enhancing ? 'Enhancing...' : '🚀 Enhance'}
-                            </button>
                         )}
                     </div>
 

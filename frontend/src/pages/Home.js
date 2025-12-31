@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ArticleCard from '../components/ArticleCard';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { getArticles, scrapeArticles, deleteArticle } from '../services/api';
+import { getArticles, scrapeArticles, deleteArticle, enhanceAllArticles } from '../services/api';
 
 function Home() {
     const [articles, setArticles] = useState([]);
@@ -9,6 +9,7 @@ function Home() {
     const [error, setError] = useState(null);
     const [filter, setFilter] = useState('all'); // all, original, enhanced
     const [scraping, setScraping] = useState(false);
+    const [enhancing, setEnhancing] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -96,6 +97,42 @@ function Home() {
         }
     };
 
+    const handleEnhanceAll = async () => {
+        setEnhancing(true);
+        try {
+            await enhanceAllArticles();
+            await pollForEnhancement();
+        } catch (err) {
+            alert('Enhancement failed: ' + (err.response?.data?.message || err.message));
+            setEnhancing(false);
+        }
+    };
+
+    const pollForEnhancement = async () => {
+        const maxAttempts = 90;
+        const delayMs = 1000;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const response = await getArticles(1, 9, false); // check original articles
+                if (response.total === 0) {
+                    // All enhanced
+                    await fetchArticles();
+                    setEnhancing(false);
+                    alert('All articles enhanced!');
+                    return;
+                }
+            } catch (err) {
+                console.error('Poll failed:', err);
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+
+        await fetchArticles();
+        setEnhancing(false);
+        alert('Enhancement in progress. Refresh later.');
+    };
+
     return (
         <div>
             {/* Hero Section */}
@@ -105,13 +142,22 @@ function Home() {
                     Explore original and AI-enhanced articles from BeyondChats blog. 
                     See how we use LLM technology to improve content quality.
                 </p>
-                <button
-                    onClick={handleScrape}
-                    disabled={scraping}
-                    className="bg-white text-blue-600 px-6 py-3 rounded-lg font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {scraping ? 'Scraping...' : '🔄 Scrape New Articles'}
-                </button>
+                <div className="flex gap-4 flex-wrap">
+                    <button
+                        onClick={handleScrape}
+                        disabled={scraping || enhancing}
+                        className="bg-white text-blue-600 px-6 py-3 rounded-lg font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {scraping ? 'Scraping...' : '🔄 Scrape New Articles'}
+                    </button>
+                    <button
+                        onClick={handleEnhanceAll}
+                        disabled={scraping || enhancing}
+                        className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {enhancing ? 'Enhancing...' : '✨ Enhance All'}
+                    </button>
+                </div>
             </div>
 
             {/* Filter Tabs */}
