@@ -14,20 +14,21 @@ A full-stack application for scraping, enhancing, and displaying blog articles f
 
 ## Overview
 
-This project was built for the BeyondChats Full Stack Web Developer Intern assignment. It consists of three main phases:
+This project was built for the BeyondChats Full Stack Web Developer Intern assignment. It consists of:
 
-1. **Phase 1 (Backend)**: Express.js API with MongoDB for storing articles, plus web scraping functionality
-2. **Phase 2 (Node Script)**: Automated script that enhances articles using Google Search and OpenAI
-3. **Phase 3 (Frontend)**: React.js application with a responsive UI to display articles
+1. **Backend API**: Express.js server with MongoDB, web scraping, and integrated AI enhancement
+2. **Frontend**: React.js application with responsive UI to display and manage articles
+3. **Enhancement Pipeline**: Google Search (Zenserp) + OpenAI GPT-3.5 for article enhancement
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Backend | Node.js, Express.js, MongoDB, Mongoose, Puppeteer |
-| Node Script | Puppeteer, Cheerio, OpenAI API, SerpAPI |
+|-------|------------|
+| Backend | Node.js, Express.js, MongoDB, Mongoose, Puppeteer, Cheerio |
+| AI Enhancement | OpenAI GPT-3.5, Zenserp API (Google Search) |
 | Frontend | React.js, Tailwind CSS, Axios, React Router |
 | Database | MongoDB Atlas |
+| Deployment | Render (Backend), Vercel (Frontend) |
 
 ## Project Structure
 
@@ -39,6 +40,10 @@ BeyondChats/
 │   │   │   └── database.js     # MongoDB connection
 │   │   ├── controllers/
 │   │   │   └── articleController.js
+│   │   ├── enhancer/           # AI Enhancement (merged from node-script)
+│   │   │   ├── googleSearch.js # Zenserp API integration
+│   │   │   ├── llm.js          # OpenAI GPT enhancement
+│   │   │   └── scraper.js      # Reference article scraper
 │   │   ├── middleware/
 │   │   │   └── errorHandler.js
 │   │   ├── models/
@@ -46,17 +51,9 @@ BeyondChats/
 │   │   ├── routes/
 │   │   │   └── articleRoutes.js
 │   │   ├── services/
+│   │   │   ├── enhancerService.js  # Enhancement pipeline
 │   │   │   └── scraperService.js
 │   │   └── server.js
-│   └── package.json
-│
-├── node-script/                # Article Enhancement Script
-│   ├── src/
-│   │   ├── services/
-│   │   │   ├── googleSearch.js
-│   │   │   ├── scraper.js
-│   │   │   └── llm.js
-│   │   └── index.js
 │   └── package.json
 │
 ├── frontend/                   # React.js Frontend
@@ -169,11 +166,11 @@ cd beyondchats-assignment
 cd backend
 npm install
 
-# Create .env file
-cp .env.example .env
-
-# Edit .env and add your MongoDB URI:
+# Create .env file with:
+# PORT=5000
 # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/beyondchats
+# OPENAI_API_KEY=your_openai_api_key
+# ZENSERP_API_KEY=your_zenserp_api_key
 
 # Start the server
 npm run dev
@@ -193,23 +190,6 @@ npm start
 
 The frontend will be available at `http://localhost:3000`
 
-### Step 4: Setup Node Script (Optional - for article enhancement)
-
-```bash
-cd node-script
-npm install
-
-# Create .env file
-cp .env.example .env
-
-# Edit .env and add your API keys:
-# OPENAI_API_KEY=your_openai_key
-# SERPAPI_KEY=your_serpapi_key
-
-# Run the enhancement script
-npm start
-```
-
 ## API Documentation
 
 ### Base URL
@@ -222,10 +202,10 @@ npm start
 | GET | `/articles` | Get all articles | Query: `page`, `limit`, `enhanced` |
 | GET | `/articles/:id` | Get single article | - |
 | POST | `/articles` | Create article | `{ title, content, sourceUrl, ... }` |
-| PUT | `/articles/:id` | Update article | Article fields to update |
 | DELETE | `/articles/:id` | Delete article | - |
 | POST | `/articles/scrape` | Scrape from BeyondChats | `{ count: 5 }` |
-| GET | `/articles/pending` | Get unenhanced articles | - |
+| POST | `/articles/enhance-all` | Enhance all pending articles | - |
+| POST | `/articles/:id/enhance` | Enhance single article | - |
 
 ### Example Requests
 
@@ -244,21 +224,24 @@ curl http://localhost:5000/api/articles/507f1f77bcf86cd799439011
 
 ## Live Demo
 
-🔗 **Frontend**: [Your Deployed Link Here]
+🔗 **Frontend**: [https://beyond-chats-assignment-theta.vercel.app](https://beyond-chats-assignment-theta.vercel.app)
 
-🔗 **API**: [Your API Link Here]
+🔗 **Backend API**: [https://beyondchats-assignment-hrzq.onrender.com](https://beyondchats-assignment-hrzq.onrender.com)
 
 ## Features
 
-- ✅ Web scraping from BeyondChats blog
-- ✅ MongoDB storage with Mongoose
-- ✅ Full CRUD API operations
-- ✅ Article enhancement with LLM
-- ✅ Google search integration
-- ✅ Responsive React frontend
+- ✅ Web scraping from BeyondChats blog (Puppeteer)
+- ✅ MongoDB Atlas storage with Mongoose
+- ✅ Full REST API operations
+- ✅ AI article enhancement with OpenAI GPT-3.5
+- ✅ Google search integration via Zenserp API
+- ✅ "Enhance All" button for bulk processing
+- ✅ Responsive React frontend with Tailwind CSS
 - ✅ Toggle between original/enhanced versions
-- ✅ Reference citations
-- ✅ Filter by article status
+- ✅ Reference citations from related articles
+- ✅ Filter articles by status (All/Enhanced/Original)
+- ✅ Delete articles
+- ✅ Deployed on Render (backend) and Vercel (frontend)
 
 ## Screenshots
 
@@ -269,6 +252,8 @@ curl http://localhost:5000/api/articles/507f1f77bcf86cd799439011
 ![Article Detail](screenshots/article.png)
 
 ## Author
+
+**Swarnaraja Sekhar**
 
 Built for BeyondChats Full Stack Web Developer Intern Assignment
 
