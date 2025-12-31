@@ -231,11 +231,33 @@ exports.scrapeArticles = async (req, res) => {
 // @route   POST /api/articles/:id/enhance
 // @access  Public
 exports.enhanceArticle = async (req, res) => {
+  const articleId = req.params.id;
+
+  // Validate article exists
   try {
-    const enhanced = await enhancerService.enhanceSingleArticle(req.params.id);
-    res.status(200).json({ success: true, data: enhanced });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    const article = await Article.findById(articleId);
+    if (!article) {
+      return res.status(404).json({ success: false, error: 'Article not found' });
+    }
+    if (article.isEnhanced) {
+      return res.status(200).json({ success: true, message: 'Already enhanced', data: article });
+    }
+  } catch (err) {
+    return res.status(400).json({ success: false, error: 'Invalid article ID' });
+  }
+
+  // Respond immediately
+  res.status(202).json({
+    success: true,
+    message: 'Enhancement started. Poll the article for updates.'
+  });
+
+  // Run enhancement in background
+  try {
+    await enhancerService.enhanceSingleArticle(articleId);
+    console.log(`Enhancement complete for article ${articleId}`);
+  } catch (err) {
+    console.error(`Enhancement failed for article ${articleId}:`, err.message);
   }
 };
 

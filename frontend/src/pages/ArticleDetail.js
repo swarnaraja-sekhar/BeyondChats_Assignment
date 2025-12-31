@@ -46,13 +46,37 @@ function ArticleDetail() {
         setEnhancing(true);
         try {
             await enhanceArticle(id);
-            await fetchArticle();
-            setShowEnhanced(true);
+            // Poll for completion
+            await pollForEnhancement();
         } catch (err) {
             alert('Enhancement failed: ' + (err.response?.data?.error || err.message));
-        } finally {
             setEnhancing(false);
         }
+    };
+
+    const pollForEnhancement = async () => {
+        const maxAttempts = 60; // up to 60 seconds
+        const delayMs = 1000;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const response = await getArticle(id);
+                if (response.data.isEnhanced) {
+                    setArticle(response.data);
+                    setShowEnhanced(true);
+                    setEnhancing(false);
+                    return;
+                }
+            } catch (err) {
+                console.error('Poll failed:', err);
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+
+        // Timeout - refresh anyway
+        await fetchArticle();
+        setEnhancing(false);
+        alert('Enhancement is still processing. Refresh later.');
     };
 
     // Clean content by removing icon characters, HTML junk, and attributes while preserving structure
